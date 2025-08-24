@@ -1,0 +1,229 @@
+version: 2
+
+models:
+  - name: egn_cmn_cdp_bal_rpt_byday2 # Tên model trong dbt, trùng với tên file .sql
+    description: "Bảng lưu thông tin số dư hợp đồng CDP và các thuộc tính đi kèm" # Description của bảng
+    config:
+      alias: egn_cmn_cdp_bal_rpt_byday2 # Tên model trong dbt, trùng với tên file .sql
+      schema: "{{ var('src_eng_cmn_scm') }}"    # Tên schema trong dbt
+      meta:
+        table_type: append # Kiểu bảng: append, upsert, scd
+        partition: sysdate_1 # Partitioning strategy theo t24, way4, sysdate_1
+        max_retries: 3 # Số lần retry khi gặp lỗi
+        dagster:
+          group: "cmn_engine" # dagster group name
+        depends:
+          eod/cdp_tbl_cdp_balance_report_byday__mnp: # depend vào bảng cdp_tbl_cdp_balance_report_byday__mnp của hệ thống eod
+            classpath: analyzer.dbt.depends.date.SysdateMinus1Point # depend vào data ngày T-1
+            kwargs:
+              dilation: 0 # Dilation = 0 để lấy data ngày T-1, Dilation = 1 để lấy data ngày T-2
+          eod/t24_customer__s2:
+            classpath: analyzer.dbt.depends.date.T24Point # depend vào data ngày làm việc T24 (T24 lwd / T24 last working day)
+            kwargs:
+              dilation: 0
+        spark:
+          "spark.executor.memory": "8g"
+          "spark.executor.cores": 2
+          "spark.driver.memory": "1g"
+          "spark.executor.instances": 2
+        test:
+          include: false # Chạy test if true, ignore nếu if false.
+          tags: ['required', 'optional']
+          spark: # Spark Configuration for test
+            "spark.executor.memory": "4096m"
+            "spark.executor.cores": 1
+            "spark.driver.memory": "2048m"
+            "spark.executor.instances": 2
+    columns:
+      - name: tf_sourcing_at
+        description: "Cột kỹ thuật, ngày dữ liệu được tạo"
+        data_type: timestamp
+
+      - name: tf_etl_at
+        description: "Cột kỹ thuật, thời điểm chạy job engine"
+        data_type: timestamp
+
+      - name: data_date
+        description: "Cột kỹ thuật, ngày dữ liệu"
+        data_type: date
+
+      - name: id
+        description: "ID của bản ghi"
+        data_type: int
+
+      - name: report_date
+        description: "Ngày báo cáo"
+        data_type: date
+
+      - name: contract_number
+        description: "Số hợp đồng mua"
+        data_type: string
+
+      - name: customer_cif
+        description: "CIF khách hàng (phải tồn tại trên T24)"
+        data_type: string
+
+      - name: is_intermediary
+        description: "Khách hàng có phải là TCTG hay không"
+        data_type: string
+
+      - name: dao_code
+        description: "Mã DAO T24"
+        data_type: string
+
+      - name: original_branch_code
+        description: "Mã chi nhánh ban đầu"
+        data_type: string
+
+      - name: transfer_branch_code
+        description: "Mã chi nhánh nhận chuyển nhượng"
+        data_type: string
+
+      - name: currency
+        description: "Loại tiền phát hành"
+        data_type: string
+
+      - name: category_code
+        description: "Mã danh mục (lấy từ tbl_cdp_choice_values với choice_name='category_code')"
+        data_type: string
+
+      - name: product_code
+        description: "Mã TD"
+        data_type: string
+
+      - name: issue_date
+        description: "Ngày hiệu lực CCTG"
+        data_type: date
+
+      - name: effective_date
+        description: "Ngày mua"
+        data_type: timestamp
+
+      - name: maturity_date
+        description: "Ngày đến hạn CCTG"
+        data_type: date
+
+      - name: term
+        description: "Thời hạn gốc CCTG"
+        data_type: string
+
+      - name: contract_interest_rate
+        description: "Lãi suất niêm yết theo CD tại ngày dữ liệu"
+        data_type: decimal(5,2)
+
+      - name: holding_days
+        description: "Số ngày nắm giữ = Ngày báo cáo - Ngày mua+1"
+        data_type: int
+
+      - name: yield_rate
+        description: "Lợi suất"
+        data_type: decimal(5,2)
+
+      - name: interest_rate_type
+        description: "Loại lãi suất"
+        data_type: string
+
+      - name: interest_calculation_basis
+        description: "Cơ sở tính lãi"
+        data_type: string
+
+      - name: holiday_handling_mechanism
+        description: "Cơ chế xử lý khi hợp đồng đến hạn vào ngày nghỉ lễ"
+        data_type: string
+
+      - name: issue_lot_code
+        description: "Mã lô"
+        data_type: string
+
+      - name: certificate_number
+        description: "Số hiệu giấy CNQSH của TCTG (sinh ra sau khi phát hành sơ cấp)"
+        data_type: string
+
+      - name: sales_channel
+        description: "Kênh bán"
+        data_type: string
+
+      - name: created_by
+        description: "User nhập liệu"
+        data_type: string
+
+      - name: approved_by
+        description: "User duyệt"
+        data_type: string
+
+      - name: original_balance
+        description: "Tổng mệnh giá"
+        data_type: decimal(20,2)
+
+      - name: face_amount
+        description: "Mệnh giá"
+        data_type: decimal(20,2)
+
+      - name: quantity
+        description: "Số lượng"
+        data_type: int
+
+      - name: first_interest_payment_date
+        description: "Ngày trả lãi đầu tiên"
+        data_type: date
+
+      - name: last_interest_payment_date
+        description: "Ngày trả lãi coupon gần nhất trước đó"
+        data_type: date
+
+      - name: next_interest_payment_date
+        description: "Ngày trả lãi coupon tiếp theo"
+        data_type: date
+
+      - name: interest_payment_frequency
+        description: "Tần suất trả lãi"
+        data_type: string
+
+      - name: sell_date
+        description: "Ngày bán dự kiến"
+        data_type: date
+
+      - name: expected_holding_days
+        description: "Số ngày dự kiến nắm giữ"
+        data_type: decimal(20,2)
+
+      - name: purchase_price
+        description: "Giá mua"
+        data_type: decimal(20,2)
+
+      - name: daily_interest_accrual
+        description: "Dự chi trả lãi theo ngày"
+        data_type: decimal(20,2)
+
+      - name: cumulative_interest_accrual_from_purchase
+        description: "Dự chi trả lãi lũy kế từ ngày mua tới ngày báo cáo"
+        data_type: decimal(20,2)
+
+      - name: cumulative_interest_accrual_from_last_payment
+        description: "Dự chi trả lãi lũy kế từ ngày trả lãi gần nhất tới ngày báo cáo"
+        data_type: decimal(20,2)
+
+      - name: az_code
+        description: "Mã AZ T24"
+        data_type: string
+
+      - name: t24_old_ref
+        description: "Số AZ T24 migration"
+        data_type: string
+
+      - name: created_at
+        description: "Ngày tạo báo cáo"
+        data_type: timestamp
+
+      - name: created_by_user
+        description: "User tạo báo cáo"
+        data_type: string
+
+      - name: hh_company
+        description: "Book bán của DAO"
+        data_type: string
+
+      - name: segment
+        description: "Phân khúc khách hàng trên hệ thống T24"
+        data_type: string
+

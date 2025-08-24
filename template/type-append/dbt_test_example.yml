@@ -1,0 +1,246 @@
+# dbt test example for egn_cmn_cdp_bal_rpt_byday model
+# This file contains test cases for the egn_cmn_cdp_bal_rpt_byday model
+version: 2
+
+models:
+  - name: egn_cmn_cdp_bal_rpt_byday
+    description: "Bảng lưu thông tin số dư hợp đồng CDP và các thuộc tính đi kèm"
+    tests:
+      - dbt_utils.expression_is_true:
+          name: original_balance_x_currency_not_null # name of testcase
+          expression: "original_balance IS NOT NULL OR currency IS NOT NULL" # fail khi có data không thỏa mãn rule này.
+          row_condition: "data_date = date('{{ var('datadate') }}')" 
+          tags: [optional] # tag optional nghĩa là khi test case này fail thì job sẽ không bị ảnh hưởng
+          meta:
+            description: "optional" # thêm description cho test case, hiển thị trên dagster asset check dễ nhìn
+    config:
+      alias: egn_cmn_cdp_bal_rpt_byday
+      schema: "{{ var('src_eng_cmn_scm') }}" 
+      meta:
+        table_type: append
+        partition: sysdate_1
+        max_retries: 3
+        dagster:
+          group: "cmn_engine"
+        depends:
+          eod/cdp_tbl_cdp_balance_report_byday__mnp:
+            classpath: analyzer.dbt.depends.date.SysdateMinus1Point
+            kwargs:
+              dilation: 0
+          eod/t24_customer__s2:
+            classpath: analyzer.dbt.depends.date.T24Point
+            kwargs:
+              dilation: 0
+        spark:
+          "spark.executor.memory": "8g"
+          "spark.executor.cores": 2
+          "spark.driver.memory": "1g"
+          "spark.executor.instances": 2
+        test:
+          include: true # Chạy test nếu set include = true, ignore nếu set include = false.
+          tags: ['required', 'optional'] # Chỉ cho hệ thống biết model này bao gồm các test case nào required hay optional, hay cả hai
+          spark: # Spark Configuration for test
+            "spark.executor.memory": "4096m"
+            "spark.executor.cores": 1
+            "spark.driver.memory": "2048m"
+            "spark.executor.instances": 2
+    columns:
+      - name: tf_sourcing_at
+        description: "Cột kỹ thuật, ngày dữ liệu được tạo"
+        data_type: timestamp
+
+      - name: tf_etl_at
+        description: "Cột kỹ thuật, thời điểm chạy job engine"
+        data_type: timestamp
+
+      - name: data_date
+        description: "Cột kỹ thuật, ngày dữ liệu"
+        data_type: date
+
+      - name: id
+        description: "ID của bản ghi"
+        data_type: int
+
+      - name: report_date
+        description: "Ngày báo cáo"
+        data_type: date
+
+      - name: contract_number
+        description: "Số hợp đồng mua"
+        data_type: string
+        tests:
+          - dbt_expectations.expect_column_values_to_be_unique: # Kiểm tra tính duy nhất của cột contract_number
+              name: contract_number_unique # name of testcase
+              row_condition: "data_date = date('{{ var('datadate') }}')" # Chỉ test trên tập data mới
+              tags: [required] # tag required nghĩa là khi test case này fail thì job sẽ dừng, báo fail
+              meta:
+                description: "required" # thêm description cho test case, hiển thị trên dagster asset check dễ nhìn
+
+      - name: customer_cif
+        description: "CIF khách hàng (phải tồn tại trên T24)"
+        data_type: string
+
+      - name: is_intermediary
+        description: "Khách hàng có phải là TCTG hay không"
+        data_type: string
+
+      - name: dao_code
+        description: "Mã DAO T24"
+        data_type: string
+
+      - name: original_branch_code
+        description: "Mã chi nhánh ban đầu"
+        data_type: string
+
+      - name: transfer_branch_code
+        description: "Mã chi nhánh nhận chuyển nhượng"
+        data_type: string
+
+      - name: currency
+        description: "Loại tiền phát hành"
+        data_type: string
+
+      - name: category_code
+        description: "Mã danh mục (lấy từ tbl_cdp_choice_values với choice_name='category_code')"
+        data_type: string
+
+      - name: product_code
+        description: "Mã TD"
+        data_type: string
+
+      - name: issue_date
+        description: "Ngày hiệu lực CCTG"
+        data_type: date
+
+      - name: effective_date
+        description: "Ngày mua"
+        data_type: timestamp
+
+      - name: maturity_date
+        description: "Ngày đến hạn CCTG"
+        data_type: date
+
+      - name: term
+        description: "Thời hạn gốc CCTG"
+        data_type: string
+
+      - name: contract_interest_rate
+        description: "Lãi suất niêm yết theo CD tại ngày dữ liệu"
+        data_type: decimal(5,2)
+
+      - name: holding_days
+        description: "Số ngày nắm giữ = Ngày báo cáo - Ngày mua+1"
+        data_type: int
+
+      - name: yield_rate
+        description: "Lợi suất"
+        data_type: decimal(5,2)
+
+      - name: interest_rate_type
+        description: "Loại lãi suất"
+        data_type: string
+
+      - name: interest_calculation_basis
+        description: "Cơ sở tính lãi"
+        data_type: string
+
+      - name: holiday_handling_mechanism
+        description: "Cơ chế xử lý khi hợp đồng đến hạn vào ngày nghỉ lễ"
+        data_type: string
+
+      - name: issue_lot_code
+        description: "Mã lô"
+        data_type: string
+
+      - name: certificate_number
+        description: "Số hiệu giấy CNQSH của TCTG (sinh ra sau khi phát hành sơ cấp)"
+        data_type: string
+
+      - name: sales_channel
+        description: "Kênh bán"
+        data_type: string
+
+      - name: created_by
+        description: "User nhập liệu"
+        data_type: string
+
+      - name: approved_by
+        description: "User duyệt"
+        data_type: string
+
+      - name: original_balance
+        description: "Tổng mệnh giá"
+        data_type: decimal(20,2)
+
+      - name: face_amount
+        description: "Mệnh giá"
+        data_type: decimal(20,2)
+
+      - name: quantity
+        description: "Số lượng"
+        data_type: int
+
+      - name: first_interest_payment_date
+        description: "Ngày trả lãi đầu tiên"
+        data_type: date
+
+      - name: last_interest_payment_date
+        description: "Ngày trả lãi coupon gần nhất trước đó"
+        data_type: date
+
+      - name: next_interest_payment_date
+        description: "Ngày trả lãi coupon tiếp theo"
+        data_type: date
+
+      - name: interest_payment_frequency
+        description: "Tần suất trả lãi"
+        data_type: string
+
+      - name: sell_date
+        description: "Ngày bán dự kiến"
+        data_type: date
+
+      - name: expected_holding_days
+        description: "Số ngày dự kiến nắm giữ"
+        data_type: decimal(20,2)
+
+      - name: purchase_price
+        description: "Giá mua"
+        data_type: decimal(20,2)
+
+      - name: daily_interest_accrual
+        description: "Dự chi trả lãi theo ngày"
+        data_type: decimal(20,2)
+
+      - name: cumulative_interest_accrual_from_purchase
+        description: "Dự chi trả lãi lũy kế từ ngày mua tới ngày báo cáo"
+        data_type: decimal(20,2)
+
+      - name: cumulative_interest_accrual_from_last_payment
+        description: "Dự chi trả lãi lũy kế từ ngày trả lãi gần nhất tới ngày báo cáo"
+        data_type: decimal(20,2)
+
+      - name: az_code
+        description: "Mã AZ T24"
+        data_type: string
+
+      - name: t24_old_ref
+        description: "Số AZ T24 migration"
+        data_type: string
+
+      - name: created_at
+        description: "Ngày tạo báo cáo"
+        data_type: timestamp
+
+      - name: created_by_user
+        description: "User tạo báo cáo"
+        data_type: string
+
+      - name: hh_company
+        description: "Book bán của DAO"
+        data_type: string
+
+      - name: segment
+        description: "Phân khúc khách hàng trên hệ thống T24"
+        data_type: string
+

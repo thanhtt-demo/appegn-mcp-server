@@ -1,33 +1,30 @@
-# Use Python 3.12 slim image as base
-FROM python:3.12-slim
+FROM cgr.dev/chainguard/wolfi-base:latest
 
-# Set working directory
-WORKDIR /app
+ARG USER_UID=1000
+ARG HOME_DIR=/opt/app
 
-# Install uv (fast Python package manager)
-RUN pip install uv
+RUN apk add --no-cache python-3.12 py3.12-pip tini &&\
+    addgroup -g $USER_UID app &&\
+    adduser -D -u $USER_UID -G app -h ${HOME_DIR} app &&\
+    chown -R app:app /opt/app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
+WORKDIR ${HOME_DIR}
 
-# Install dependencies using uv
-RUN uv sync --frozen
+USER app
 
-# Copy application code
-COPY . .
+# Copy the application code
+COPY --chown=1000:1000 --chmod=750 . .
 
-# Expose port 8001 (default for FastMCP HTTP server)
+RUN python -m venv /opt/app/deploy &&\
+    source /opt/app/deploy/bin/activate &&\
+    pip install --no-cache -r requirements.txt
+
 EXPOSE 8000
-# Set environment variable for HTTP server
+ENV TINI_SUBREAPER=1
 ENV MCP_HTTP_PORT=8000
 ENV MCP_HTTP_HOST=0.0.0.0
 
-# Health check - check if MCP endpoint responds
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-#     CMD curl -f http://localhost:8000/mcp || exit 1
 
-# Install curl for health check
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+ENTRYPOINT [ "/usr/bin/tini", "-g", "--", "/opt/app/entrypoint.sh" ]
 
-# Run the weather MCP server
-CMD ["uv", "run", "main.py"]
+CMD ["uvicorn", "--port", "8000", "--host", "0.0.0.0", "main:app", "--app-dir", "/opt/app"]
